@@ -1,0 +1,8 @@
+{
+	"typescript.tsdk": "node_modules/typescript/lib",
+	"files.exclude": {
+		"**/.*": true,
+		"**/*.d.ts": { "when": "$(basename).ts" },
+		"**/*.js": { "when": "$(basename).ts" }
+	}
+}
