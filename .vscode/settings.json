@@ -2,7 +2,9 @@
 	"typescript.tsdk": "node_modules/typescript/lib",
 	"files.exclude": {
 		"**/.*": true,
-		"**/*.d.ts": { "when": "$(basename).ts" },
-		"**/*.js": { "when": "$(basename).ts" }
+		"**/*.d.ts": true,
+		"**/*.js": { "when": "$(basename).ts" },
+		"LICENSE": true,
+		"package-lock.json": true
 	}
 }
