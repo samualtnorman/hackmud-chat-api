@@ -3,6 +3,10 @@
 	"version": "0.0.1",
 	"description": "this is just another hackmud chat api for node, this time written in typescript",
 	"main": "index.js",
+	"files": [
+		"index.js",
+		"index.d.ts"
+	],
 	"scripts": {
 		"build": "tsc",
 		"watch": "tsc --watch"
