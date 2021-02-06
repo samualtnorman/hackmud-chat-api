@@ -14,13 +14,14 @@ type MessageSimplified = {
 	channel: string
 	time: number
 	toUsers: string[]
-} | {
+}
+
+type MessageTellSimplified = {
 	user: string
 	type: MessageType.Tell
 	msg: string
-	channel: null
 	time: number
-	toUsers: string
+	toUser: string
 }
 
 enum MessageType {
@@ -32,7 +33,7 @@ type MessageJoin = MessageChannel & { is_join: true }
 type MessageLeave = MessageChannel & { is_leave: true }
 type JSONValue = string | number | boolean | JSONValue[] | { [key: string]: JSONValue } | null
 type APIResponse = Record<string, JSONValue> & { ok: true }
-type MessageHandler = (messages: MessageSimplified[]) => void
+type MessageHandler = (messages: (MessageSimplified | MessageTellSimplified)[]) => void
 type StartHandler = (token: string) => void
 
 export class HackmudChatAPI {
@@ -144,25 +145,16 @@ export async function getMessages(chatToken: string, usernames: string | string[
 		after
 	})).chats
 
-	const idMessages = new Map<string, MessageSimplified>()
+	const idMessages = new Map<string, MessageSimplified | MessageTellSimplified>()
 
 	for (const [ user, messages ] of Object.entries(chats)) {
 		for (const message of messages) {
 			const idMessage = idMessages.get(message.id)
 
-			if (!("channel" in message)) {
-				idMessages.set(message.id, {
-					user: message.from_user,
-					type: MessageType.Tell,
-					channel: null,
-					msg: message.msg,
-					time: message.t,
-					toUsers: user
-				})
-			} else {
-				if (idMessage) {
-					(idMessage.toUsers as string[]).push(user) // we will never come across a tell message
-				} else {
+			if ("channel" in message) {
+				if (idMessage)
+					(idMessage as MessageSimplified).toUsers.push(user)
+				else {
 					let type: MessageSimplified["type"]
 
 					if ("is_join" in message)
@@ -181,6 +173,14 @@ export async function getMessages(chatToken: string, usernames: string | string[
 						toUsers: [ user ]
 					})
 				}
+			} else {
+				idMessages.set(message.id, {
+					user: message.from_user,
+					type: MessageType.Tell,
+					msg: message.msg,
+					time: message.t,
+					toUser: user
+				})
 			}
 		}
 	}
