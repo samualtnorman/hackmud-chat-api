@@ -7,13 +7,31 @@ type Message = {
 	msg: string
 }
 
+type MessageSimplified = {
+	user: string
+	type: MessageType.Join | MessageType.Leave | MessageType.Send
+	msg: string
+	channel: string
+	time: number
+	toUsers: string[]
+} | {
+	user: string
+	type: MessageType.Tell
+	msg: string
+	channel: null
+	time: number
+	toUsers: string
+}
+
+enum MessageType {
+	Join, Leave, Send, Tell
+}
+
 type MessageChannel = Message & { channel: string }
 type MessageJoin = MessageChannel & { is_join: true }
 type MessageLeave = MessageChannel & { is_leave: true }
 type JSONValue = string | number | boolean | JSONValue[] | { [key: string]: JSONValue } | null
 type APIResponse = Record<string, JSONValue> & { ok: true }
-
-
 type MessageHandler = (messages: MessageSimplified[]) => void
 type StartHandler = (token: string) => void
 
@@ -25,12 +43,12 @@ export class HackmudChatAPI {
 	private users: string[] | null = null
 
 	constructor(tokenOrPass: string) {
-		if (tokenOrPass.length == 5)
-			getToken(tokenOrPass).then(value => {
-				this.token = value
+		if (tokenOrPass.length == 5) {
+			getToken(tokenOrPass).then(token => {
+				this.token = token
 				this.init()
 			})
-		else {
+		} else {
 			this.token = tokenOrPass
 			this.init()
 		}
@@ -38,58 +56,65 @@ export class HackmudChatAPI {
 
 	onStart(startHandler: StartHandler) {
 		this.startHandlers.push(startHandler)
+
 		return this
 	}
 
 	onMessage(messageHandler: MessageHandler) {
 		this.messageHandlers.push(messageHandler)
+
 		return this
 	}
 
-	async tellMessage(from: string, to: string, message: string) {
+	tellMessage(from: string, to: string, message: string) {
 		if (this.token)
-			await tellMessage(this.token, from, to, message)
+			return tellMessage(this.token, from, to, message)
+		else {
+			return new Promise(resolve => {
+				this.onStart(async token =>
+					resolve(tellMessage(token, from, to, message))
+				)
+			})
+		}
 	}
 
-	async sendMessage(from: string, channel: string, message: string) {
+	sendMessage(from: string, channel: string, message: string) {
 		if (this.token)
-			await sendMessage(this.token, from, channel, message)
-	}
-
-	private async getUsers() {
-		if (this.token)
-			this.users = [ ...(await getChannels(this.token)).keys() ]
-	}
-
-	private async getMessagesLoop() {
-		if (this.token && this.users) {
-			const messages = await getMessages(this.token, this.users, this.lastMessageT)
-
-			if (messages.length) {
-				if (messages[0].time == this.lastMessageT)
-					messages.shift()
-
-				if (messages.length) {
-					this.lastMessageT = messages[messages.length - 1].time
-
-					for (const messageHandler of this.messageHandlers)
-						messageHandler(messages)
-				}
-			}
-
-			setTimeout(() => this.getMessagesLoop(), 2000)
+			return sendMessage(this.token, from, channel, message)
+		else {
+			return new Promise(resolve => {
+				this.onStart(async token =>
+					resolve(sendMessage(token, from, channel, message))
+				)
+			})
 		}
 	}
 
 	private async init() {
-		if (this.token) {
-			await this.getUsers()
+		this.users = [ ...(await getChannels(this.token!)).keys() ]
 
-			for (const startHandler of this.startHandlers)
-				startHandler(this.token)
+		for (const startHandler of this.startHandlers)
+			startHandler(this.token!)
 
-			this.getMessagesLoop()
+		this.getMessagesLoop()
+	}
+
+	private async getMessagesLoop() {
+		const messages = await getMessages(this.token!, this.users!, this.lastMessageT)
+
+		if (messages.length) {
+			if (messages[0].time == this.lastMessageT)
+				messages.shift()
+
+			if (messages.length) {
+				this.lastMessageT = messages[messages.length - 1].time
+
+				for (const messageHandler of this.messageHandlers)
+					messageHandler(messages)
+			}
 		}
+
+		setTimeout(() => this.getMessagesLoop(), 2000)
 	}
 }
 
@@ -101,28 +126,12 @@ export async function getToken(pass: string) {
 	return (await api("get_token", { pass })).chat_token
 }
 
-export async function tellMessage(chatToken: string, from: string, to: string, message: string) {
-	await api("create_chat", { chat_token: chatToken, username: from, tell: to, msg: message })
+export function tellMessage(chatToken: string, from: string, to: string, message: string) {
+	return api("create_chat", { chat_token: chatToken, username: from, tell: to, msg: message })
 }
 
-export async function sendMessage(chatToken: string, from: string, channel: string, message: string) {
-	await api("create_chat", { chat_token: chatToken, username: from, channel, msg: message })
-}
-
-type MessageSimplified = {
-	user: string
-	type: "join" | "leave" | "send"
-	msg: string
-	channel: string
-	time: number
-	toUsers: string[]
-} | {
-	user: string
-	type: "tell"
-	msg: string
-	channel: null
-	time: number
-	toUsers: string
+export function sendMessage(chatToken: string, from: string, channel: string, message: string) {
+	return api("create_chat", { chat_token: chatToken, username: from, channel, msg: message })
 }
 
 export async function getMessages(chatToken: string, usernames: string | string[], after: number) {
@@ -144,7 +153,7 @@ export async function getMessages(chatToken: string, usernames: string | string[
 			if (!("channel" in message)) {
 				idMessages.set(message.id, {
 					user: message.from_user,
-					type: "tell",
+					type: MessageType.Tell,
 					channel: null,
 					msg: message.msg,
 					time: message.t,
@@ -155,23 +164,18 @@ export async function getMessages(chatToken: string, usernames: string | string[
 					(idMessage.toUsers as string[]).push(user) // we will never come across a tell message
 				} else {
 					let type: MessageSimplified["type"]
-					let channel: MessageSimplified["channel"]
 
-					if ("is_join" in message) {
-						type = "join"
-						channel = message.channel
-					} else if ("is_leave" in message) {
-						type = "leave"
-						channel = message.channel
-					} else {
-						type = "send"
-						channel = message.channel
-					}
+					if ("is_join" in message)
+						type = MessageType.Join
+					else if ("is_leave" in message)
+						type = MessageType.Leave
+					else
+						type = MessageType.Send
 
 					idMessages.set(message.id, {
 						user: message.from_user,
 						type,
-						channel,
+						channel: message.channel,
 						msg: message.msg,
 						time: message.t,
 						toUsers: [ user ]
@@ -291,29 +295,26 @@ export function api(method: "get_token", args: {
 }>
 
 export function api(method: string, args: object) {
-	let data = ""
+	const buffers: Buffer[] = []
 
 	return new Promise<APIResponse>((resolve, reject) => {
 		request({
 			method: "POST",
 			hostname: "www.hackmud.com",
 			path: `/mobile/${method}.json`,
-			headers: {
-				"Content-Type": "application/json"
-			}
+			headers: { "Content-Type": "application/json" }
 		}, res => res
-			.on("data", (chunk: Buffer) => data += chunk.toString())
+			.on("data", (buffer: Buffer) => buffers.push(buffer))
 			.on("end", () => {
-				if (!data.length)
-					reject("Response from server was empty, was the token revoked?")
-				else {
-					const response = JSON.parse(data) as APIResponse | { ok: false, msg: string }
+				if (buffers.length) {
+					const response = JSON.parse(Buffer.concat(buffers).toString()) as APIResponse | { ok: false, msg: string }
 
 					if (response.ok)
 						resolve(response)
 					else
-						reject(response.msg)
-				}
+						reject(new Error(response.msg))
+				} else
+					reject(new Error("expired or invalid token"))
 			})
 		).end(JSON.stringify(args))
 	})
