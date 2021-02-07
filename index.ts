@@ -1,13 +1,13 @@
 import { request } from "https"
 
-type Message = {
+type RawMessage = {
 	id: string
 	t: number
 	from_user: string
 	msg: string
 }
 
-type MessageSimplified = {
+export type ChannelMessage = {
 	user: string
 	type: MessageType.Join | MessageType.Leave | MessageType.Send
 	msg: string
@@ -16,7 +16,7 @@ type MessageSimplified = {
 	toUsers: string[]
 }
 
-type MessageTellSimplified = {
+export type TellMessage = {
 	user: string
 	type: MessageType.Tell
 	msg: string
@@ -24,16 +24,16 @@ type MessageTellSimplified = {
 	toUser: string
 }
 
-enum MessageType {
+export enum MessageType {
 	Join, Leave, Send, Tell
 }
 
-type MessageChannel = Message & { channel: string }
-type MessageJoin = MessageChannel & { is_join: true }
-type MessageLeave = MessageChannel & { is_leave: true }
+type RawChannelMessage = RawMessage & { channel: string }
+type RawJoinMessage = RawChannelMessage & { is_join: true }
+type RawLeaveMessage = RawChannelMessage & { is_leave: true }
 type JSONValue = string | number | boolean | JSONValue[] | { [key: string]: JSONValue } | null
 type APIResponse = Record<string, JSONValue> & { ok: true }
-type MessageHandler = (messages: (MessageSimplified | MessageTellSimplified)[]) => void
+type MessageHandler = (messages: (ChannelMessage | TellMessage)[]) => void
 type StartHandler = (token: string) => void
 
 export class HackmudChatAPI {
@@ -171,7 +171,7 @@ export async function getMessages(chatToken: string, usernames: string | string[
 		after
 	})).chats
 
-	const idMessages = new Map<string, MessageSimplified | MessageTellSimplified>()
+	const idMessages = new Map<string, ChannelMessage | TellMessage>()
 
 	for (const [ user, messages ] of Object.entries(chats)) {
 		for (const message of messages) {
@@ -179,9 +179,9 @@ export async function getMessages(chatToken: string, usernames: string | string[
 
 			if ("channel" in message) {
 				if (idMessage)
-					(idMessage as MessageSimplified).toUsers.push(user)
+					(idMessage as ChannelMessage).toUsers.push(user)
 				else {
-					let type: MessageSimplified["type"]
+					let type: ChannelMessage["type"]
 
 					if ("is_join" in message)
 						type = MessageType.Join
@@ -251,13 +251,13 @@ export async function getChannels(chatToken: string, mapChannels = false) {
 	const channels = new Map<string, string[]>()
 
 	for (let user in usersData) {
-		const channelsData = usersData[user] as NonNullable<typeof usersData[typeof user]>
+		const channelsData = usersData[user]// as NonNullable<typeof usersData[typeof user]>
 
 		users.set(user, Object.keys(channelsData))
 
 		if (mapChannels)
 			for (const channel in channelsData) {
-				const usersInChannel = channelsData[channel] as NonNullable<typeof channelsData[typeof channel]>
+				const usersInChannel = channelsData[channel]// as NonNullable<typeof channelsData[typeof channel]>
 
 				if (!channels.get(channel))
 					channels.set(channel, usersInChannel)
@@ -294,7 +294,7 @@ export function api(method: "chats", args: {
 	before: number
 }): Promise<{
 	ok: true
-	chats: Record<string, (Message | MessageChannel | MessageJoin | MessageLeave)[]>
+	chats: Record<string, (RawMessage | RawChannelMessage | RawJoinMessage | RawLeaveMessage)[]>
 }>
 
 export function api(method: "chats", args: {
@@ -303,7 +303,7 @@ export function api(method: "chats", args: {
 	after: number
 }): Promise<{
 	ok: true
-	chats: Record<string, (Message | MessageChannel | MessageJoin | MessageLeave)[]>
+	chats: Record<string, (RawMessage | RawChannelMessage | RawJoinMessage | RawLeaveMessage)[]>
 }>
 
 export function api(method: "account_data", args: {
