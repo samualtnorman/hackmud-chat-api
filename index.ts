@@ -10,7 +10,7 @@ type RawMessage = {
 export type ChannelMessage = {
 	user: string
 	type: MessageType.Join | MessageType.Leave | MessageType.Send
-	msg: string
+	content: string
 	channel: string
 	time: number
 	toUsers: string[]
@@ -19,7 +19,7 @@ export type ChannelMessage = {
 export type TellMessage = {
 	user: string
 	type: MessageType.Tell
-	msg: string
+	content: string
 	time: number
 	toUser: string
 }
@@ -194,7 +194,7 @@ export async function getMessages(chatToken: string, usernames: string | string[
 						user: message.from_user,
 						type,
 						channel: message.channel,
-						msg: message.msg,
+						content: message.msg,
 						time: message.t,
 						toUsers: [ user ]
 					})
@@ -203,7 +203,7 @@ export async function getMessages(chatToken: string, usernames: string | string[
 				idMessages.set(message.id, {
 					user: message.from_user,
 					type: MessageType.Tell,
-					msg: message.msg,
+					content: message.msg,
 					time: message.t,
 					toUser: user
 				})
