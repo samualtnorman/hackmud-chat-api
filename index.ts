@@ -91,6 +91,32 @@ export class HackmudChatAPI {
 		}
 	}
 
+	getMessages(usernames: string | string[], after: number) {
+		if (this.token)
+			return getMessages(this.token, usernames, after)
+		else {
+			return new Promise(resolve => {
+				this.onStart(async token =>
+					resolve(getMessages(token, usernames, after))
+				)
+			})
+		}
+	}
+
+	getChannels(mapChannels?: false): Promise<Map<string, string[]>>
+	getChannels(mapChannels: true): Promise<{ users: Map<string, string[]>, channels: Map<string, string[]> }>
+	getChannels(mapChannels = false) {
+		if (this.token)
+			return getChannels(this.token, mapChannels as any)
+		else {
+			return new Promise(resolve => {
+				this.onStart(async token =>
+					resolve(getChannels(token, mapChannels as any))
+				)
+			})
+		}
+	}
+
 	private async init() {
 		this.users = [ ...(await getChannels(this.token!)).keys() ]
 
