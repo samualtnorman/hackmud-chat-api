@@ -29,6 +29,7 @@ export enum MessageType {
 }
 
 type RawChannelMessage = RawMessage & { channel: string }
+type RawTellMessage = RawMessage & { to_user: string }
 type RawJoinMessage = RawChannelMessage & { is_join: true }
 type RawLeaveMessage = RawChannelMessage & { is_leave: true }
 type JSONValue = string | number | boolean | JSONValue[] | { [key: string]: JSONValue } | null
@@ -205,7 +206,7 @@ export async function getMessages(chatToken: string, usernames: string | string[
 					type: MessageType.Tell,
 					content: message.msg,
 					time: message.t,
-					toUser: user
+					toUser: message.to_user
 				})
 			}
 		}
@@ -294,7 +295,7 @@ export function api(method: "chats", args: {
 	before: number
 }): Promise<{
 	ok: true
-	chats: Record<string, (RawMessage | RawChannelMessage | RawJoinMessage | RawLeaveMessage)[]>
+	chats: Record<string, (RawTellMessage | RawChannelMessage | RawJoinMessage | RawLeaveMessage)[]>
 }>
 
 export function api(method: "chats", args: {
@@ -303,7 +304,7 @@ export function api(method: "chats", args: {
 	after: number
 }): Promise<{
 	ok: true
-	chats: Record<string, (RawMessage | RawChannelMessage | RawJoinMessage | RawLeaveMessage)[]>
+	chats: Record<string, (RawTellMessage | RawChannelMessage | RawJoinMessage | RawLeaveMessage)[]>
 }>
 
 export function api(method: "account_data", args: {
