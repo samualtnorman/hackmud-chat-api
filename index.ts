@@ -8,6 +8,7 @@ type RawMessage = {
 }
 
 export type ChannelMessage = {
+	id: string
 	user: string
 	type: MessageType.Join | MessageType.Leave | MessageType.Send
 	content: string
@@ -17,6 +18,7 @@ export type ChannelMessage = {
 }
 
 export type TellMessage = {
+	id: string
 	user: string
 	type: MessageType.Tell
 	content: string
@@ -43,17 +45,14 @@ export class HackmudChatAPI {
 	private startHandlers: StartHandler[] = []
 	private messageHandlers: MessageHandler[] = []
 	private users: string[] | null = null
+	private timeout: NodeJS.Timeout | null = null
+	private lastMessageId = ""
 
 	constructor(tokenOrPass: string) {
-		if (tokenOrPass.length == 5) {
-			getToken(tokenOrPass).then(token => {
-				this.token = token
-				this.init()
-			})
-		} else {
-			this.token = tokenOrPass
-			this.init()
-		}
+		if (tokenOrPass.length == 5)
+			getToken(tokenOrPass).then(token => this.init(token))
+		else
+			this.init(tokenOrPass)
 	}
 
 	onStart(startHandler: StartHandler) {
@@ -65,43 +64,37 @@ export class HackmudChatAPI {
 	onMessage(messageHandler: MessageHandler) {
 		this.messageHandlers.push(messageHandler)
 
+		if (this.users && !this.timeout)
+			this.startGetMessagesLoop()
+
 		return this
 	}
 
 	tellMessage(from: string, to: string, message: string) {
 		if (this.token)
 			return tellMessage(this.token, from, to, message)
-		else {
-			return new Promise(resolve => {
-				this.onStart(async token =>
-					resolve(tellMessage(token, from, to, message))
-				)
-			})
-		}
+
+		return new Promise<{ ok: true }>(resolve =>
+			this.onStart(token => resolve(tellMessage(token, from, to, message)))
+		)
 	}
 
 	sendMessage(from: string, channel: string, message: string) {
 		if (this.token)
 			return sendMessage(this.token, from, channel, message)
-		else {
-			return new Promise(resolve => {
-				this.onStart(async token =>
-					resolve(sendMessage(token, from, channel, message))
-				)
-			})
-		}
+
+		return new Promise<{ ok: true }>(resolve =>
+			this.onStart(token => resolve(sendMessage(token, from, channel, message)))
+		)
 	}
 
 	getMessages(usernames: string | string[], after: number) {
 		if (this.token)
 			return getMessages(this.token, usernames, after)
-		else {
-			return new Promise(resolve => {
-				this.onStart(async token =>
-					resolve(getMessages(token, usernames, after))
-				)
-			})
-		}
+
+		return new Promise<(ChannelMessage | TellMessage)[]>(resolve =>
+			this.onStart(token => resolve(getMessages(token, usernames, after)))
+		)
 	}
 
 	getChannels(mapChannels?: false): Promise<Map<string, string[]>>
@@ -109,29 +102,34 @@ export class HackmudChatAPI {
 	getChannels(mapChannels = false) {
 		if (this.token)
 			return getChannels(this.token, mapChannels as any)
-		else {
-			return new Promise(resolve => {
-				this.onStart(async token =>
-					resolve(getChannels(token, mapChannels as any))
-				)
-			})
-		}
+
+		return new Promise(resolve =>
+			this.onStart(token => resolve(getChannels(token, mapChannels as any)))
+		)
 	}
 
-	private async init() {
-		this.users = [ ...(await getChannels(this.token!)).keys() ]
+	private async init(token: string) {
+		this.token = token
+		this.users = [ ...(await getChannels(token)).keys() ]
 
 		for (const startHandler of this.startHandlers)
-			startHandler(this.token!)
+			startHandler(token)
 
+		if (this.messageHandlers.length)
+			this.startGetMessagesLoop()
+	}
+
+	private startGetMessagesLoop() {
 		this.getMessagesLoop()
+
+		this.timeout = setTimeout(() => this.getMessagesLoop(), 2000)
 	}
 
 	private async getMessagesLoop() {
 		const messages = await getMessages(this.token!, this.users!, this.lastMessageT)
 
 		if (messages.length) {
-			if (messages[0].time == this.lastMessageT)
+			if (messages[0].id == this.lastMessageId)
 				messages.shift()
 
 			if (messages.length) {
@@ -140,9 +138,10 @@ export class HackmudChatAPI {
 				for (const messageHandler of this.messageHandlers)
 					messageHandler(messages)
 			}
-		}
+		} else
+			this.lastMessageT = Date.now() / 1000
 
-		setTimeout(() => this.getMessagesLoop(), 2000)
+		this.timeout?.refresh()
 	}
 }
 
@@ -192,6 +191,7 @@ export async function getMessages(chatToken: string, usernames: string | string[
 						type = MessageType.Send
 
 					idMessages.set(message.id, {
+						id: message.id,
 						user: message.from_user,
 						type,
 						channel: message.channel,
@@ -202,6 +202,7 @@ export async function getMessages(chatToken: string, usernames: string | string[
 				}
 			} else {
 				idMessages.set(message.id, {
+					id: message.id,
 					user: message.from_user,
 					type: MessageType.Tell,
 					content: message.msg,
@@ -322,6 +323,7 @@ export function api(method: "get_token", args: {
 }>
 
 export function api(method: string, args: object) {
+	console.log(method)
 	const buffers: Buffer[] = []
 
 	return new Promise<APIResponse>((resolve, reject) => {
@@ -336,8 +338,8 @@ export function api(method: string, args: object) {
 				if (res.statusCode == 401)
 					return reject(new Error("expired or invalid token"))
 
-				if (res.statusCode != 200)
-					return reject(new Error(`got status code '${res.statusCode}'`))
+				// if (res.statusCode != 200)
+				// 	return reject(new Error(`got status code '${res.statusCode}'`))
 
 				if (!res.headers["content-type"])
 					return reject(new Error("missing content-type in headers"))
