@@ -41,7 +41,7 @@ type StartHandler = (token: string) => void
 
 export class HackmudChatAPI {
 	private token: string | null = null
-	private lastMessageT = Date.now() / 1000
+	private time = Date.now() / 1000
 	private startHandlers: StartHandler[] = []
 	private messageHandlers: MessageHandler[] = []
 	private users: string[] | null = null
@@ -126,20 +126,23 @@ export class HackmudChatAPI {
 	}
 
 	private async getMessagesLoop() {
-		const messages = await getMessages(this.token!, this.users!, this.lastMessageT)
+		const messages = await getMessages(this.token!, this.users!, this.time)
 
 		if (messages.length) {
 			if (messages[0].id == this.lastMessageId)
 				messages.shift()
 
 			if (messages.length) {
-				this.lastMessageT = messages[messages.length - 1].time
+				const lastMessage = messages[messages.length - 1]
+
+				this.time = lastMessage.time
+				this.lastMessageId = lastMessage.id
 
 				for (const messageHandler of this.messageHandlers)
 					messageHandler(messages)
 			}
 		} else
-			this.lastMessageT = Date.now() / 1000
+			this.time = Date.now() / 1000
 
 		this.timeout?.refresh()
 	}
