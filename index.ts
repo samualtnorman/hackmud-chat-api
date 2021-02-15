@@ -323,7 +323,6 @@ export function api(method: "get_token", args: {
 }>
 
 export function api(method: string, args: object) {
-	console.log(method)
 	const buffers: Buffer[] = []
 
 	return new Promise<APIResponse>((resolve, reject) => {
