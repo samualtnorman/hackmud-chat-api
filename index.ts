@@ -188,9 +188,11 @@ export class HackmudChatAPI {
 		this.startHandlers = null
 	}
 
-	private startGetMessagesLoop() {
-		this.getMessagesLoop()
+	private async startGetMessagesLoop() {
+		if (!this.startHandlers)
+			this.time = Date.now() / 1000
 
+		this.getMessagesLoop()
 		this.timeout = setTimeout(() => this.getMessagesLoop(), 2000)
 	}
 
@@ -286,7 +288,7 @@ export async function getMessages(chatToken: string, usernames: string | string[
 				if (idMessage)
 					(idMessage as ChannelMessage).toUsers.push(user)
 				else {
-					let type: ChannelMessage["type"]
+					let type: MessageType
 
 					if ("is_join" in message)
 						type = MessageType.Join
@@ -361,17 +363,16 @@ export async function getChannels(chatToken: string, mapChannels = false) {
 	const channels = new Map<string, string[]>()
 
 	for (let user in usersData) {
-		const channelsData = usersData[user]// as NonNullable<typeof usersData[typeof user]>
+		const channelsData = usersData[user]
 
 		users.set(user, Object.keys(channelsData))
 
-		if (mapChannels)
+		if (mapChannels) {
 			for (const channel in channelsData) {
-				const usersInChannel = channelsData[channel]// as NonNullable<typeof channelsData[typeof channel]>
-
 				if (!channels.get(channel))
-					channels.set(channel, usersInChannel)
+					channels.set(channel, channelsData[channel])
 			}
+		}
 	}
 
 	if (mapChannels)
