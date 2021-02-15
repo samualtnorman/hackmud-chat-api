@@ -7,6 +7,9 @@ type RawMessage = {
 	msg: string
 }
 
+/**
+ * A message sent in a channel using "send"
+ */
 export type ChannelMessage = {
 	id: string
 	user: string
@@ -17,6 +20,9 @@ export type ChannelMessage = {
 	toUsers: string[]
 }
 
+/**
+ * A message sent in a tell using "tell"
+ */
 export type TellMessage = {
 	id: string
 	user: string
@@ -26,6 +32,14 @@ export type TellMessage = {
 	toUser: string
 }
 
+/**
+ * Used to differentiate between message types
+ *
+ * @example
+ * if (message.type == MessageType.Tell) {
+ * 	// ...
+ * }
+ */
 export enum MessageType {
 	Join, Leave, Send, Tell
 }
@@ -39,10 +53,13 @@ type APIResponse = Record<string, JSONValue> & { ok: true }
 type MessageHandler = (messages: (ChannelMessage | TellMessage)[]) => void
 type StartHandler = (token: string) => void
 
+/**
+ * Stores state so you don't have to
+ */
 export class HackmudChatAPI {
 	private token: string | null = null
 	private time = Date.now() / 1000
-	private startHandlers: StartHandler[] = []
+	private startHandlers: StartHandler[] | null = []
 	private messageHandlers: MessageHandler[] = []
 	private users: string[] | null = null
 	private timeout: NodeJS.Timeout | null = null
@@ -55,21 +72,47 @@ export class HackmudChatAPI {
 			this.init(tokenOrPass)
 	}
 
+	/**
+	 * Runs given callback upon starting
+	 *
+	 * @param startHandler callback
+	 */
 	onStart(startHandler: StartHandler) {
+		if (!this.startHandlers)
+			throw new Error("already started")
+
 		this.startHandlers.push(startHandler)
 
 		return this
 	}
 
+	/**
+	 * Runs given callback for all messages that are recieved
+	 *
+	 * @param messageHandler callback
+	 */
 	onMessage(messageHandler: MessageHandler) {
 		this.messageHandlers.push(messageHandler)
 
-		if (this.users && !this.timeout)
-			this.startGetMessagesLoop()
+		if (!this.timeout) {
+			if (this.users)
+				this.startGetMessagesLoop()
+			else
+				this.onStart(() => this.startGetMessagesLoop())
+		}
 
 		return this
 	}
 
+	/**
+	 * Tells a message to a user
+	 *
+	 * @param from your user
+	 * @param to target user
+	 * @param message to send
+	 *
+	 * @returns a promise that resolves when request to server is complete
+	 */
 	tellMessage(from: string, to: string, message: string) {
 		if (this.token)
 			return tellMessage(this.token, from, to, message)
@@ -79,6 +122,15 @@ export class HackmudChatAPI {
 		)
 	}
 
+	/**
+	 * Sends a message to a channel
+	 *
+	 * @param from your user
+	 * @param channel target channel
+	 * @param message to send
+	 *
+	 * @returns a promise that resolves when request to server is complete
+	 */
 	sendMessage(from: string, channel: string, message: string) {
 		if (this.token)
 			return sendMessage(this.token, from, channel, message)
@@ -88,6 +140,16 @@ export class HackmudChatAPI {
 		)
 	}
 
+	/**
+	 * Gets you messages recieved from the given date to 10 minutes after the given date
+	 *
+	 * @param usernames users you want to get messages for
+	 * @param after ruby timestamp (seconds since 1970) of start date to get messages from
+	 *
+	 * @returns a promise that resolves to an array of channel and tell messages
+	 *
+	 * @example hackmudChatAPI.getMessages("mr_bot", (Date.now() / 1000) - 60)
+	 */
 	getMessages(usernames: string | string[], after: number) {
 		if (this.token)
 			return getMessages(this.token, usernames, after)
@@ -97,6 +159,14 @@ export class HackmudChatAPI {
 		)
 	}
 
+	/**
+	 * Gets you channels users are in
+	 *
+	 * @param mapChannels whether to also map the channels that other users are in
+	 *
+	 * @returns a promise that resolves to either a map of your users to the channels they are in
+	 * @returns an object containing the prior and a map of channels to the users that are in them
+	 */
 	getChannels(mapChannels?: false): Promise<Map<string, string[]>>
 	getChannels(mapChannels: true): Promise<{ users: Map<string, string[]>, channels: Map<string, string[]> }>
 	getChannels(mapChannels = false) {
@@ -112,11 +182,10 @@ export class HackmudChatAPI {
 		this.token = token
 		this.users = [ ...(await getChannels(token)).keys() ]
 
-		for (const startHandler of this.startHandlers)
+		for (const startHandler of this.startHandlers!)
 			startHandler(token)
 
-		if (this.messageHandlers.length)
-			this.startGetMessagesLoop()
+		this.startHandlers = null
 	}
 
 	private startGetMessagesLoop() {
@@ -150,20 +219,53 @@ export class HackmudChatAPI {
 
 /**
  *
- * @param pass
+ * @param pass your pass recieved using `chat_pass`
+ *
+ * @returns a promise that resolves to a chat token
  */
 export async function getToken(pass: string) {
 	return (await api("get_token", { pass })).chat_token
 }
 
+/**
+ * Tells a message to a user
+ *
+ * @param chatToken your chat token
+ * @param from your user
+ * @param to target user
+ * @param message to send
+ *
+ * @returns a promise that resolves when request to server is complete
+ */
 export function tellMessage(chatToken: string, from: string, to: string, message: string) {
 	return api("create_chat", { chat_token: chatToken, username: from, tell: to, msg: message })
 }
 
+/**
+ * Sends a message to a channel
+ *
+ * @param chatToken your chat token
+ * @param from your user
+ * @param channel target channel
+ * @param message to send
+ *
+ * @returns a promise that resolves when request to server is complete
+ */
 export function sendMessage(chatToken: string, from: string, channel: string, message: string) {
 	return api("create_chat", { chat_token: chatToken, username: from, channel, msg: message })
 }
 
+/**
+ * Gets you messages recieved from the given date to 10 minutes after the given date
+ *
+ * @param chatToken your chat token
+ * @param usernames users you want to get messages for
+ * @param after ruby timestamp (seconds since 1970) of start date to get messages from
+ *
+ * @returns a promise that resolves to an array of channel and tell messages
+ *
+ * @example hackmudChatAPI.getMessages("mr_bot", (Date.now() / 1000) - 60)
+ */
 export async function getMessages(chatToken: string, usernames: string | string[], after: number) {
 	if (typeof usernames == "string")
 		usernames = [ usernames ]
@@ -243,10 +345,13 @@ export async function getMessages(chatToken: string, usernames: string | string[
 // }
 
 /**
- * Maps your users to the channels they are in.
+ * Gets you channels users are in
  *
- * @param chatToken The token provided by getToken()
- * @param mapChannels Whether to also map all channels your users are in to users in those channels.
+ * @param chatToken your chat token
+ * @param mapChannels whether to also map the channels that other users are in
+ *
+ * @returns a promise that resolves to either a map of your users to the channels they are in
+ * @returns an object containing the prior and a map of channels to the users that are in them
  */
 export async function getChannels(chatToken: string, mapChannels?: false): Promise<Map<string, string[]>>
 export async function getChannels(chatToken: string, mapChannels: true): Promise<{ users: Map<string, string[]>, channels: Map<string, string[]> }>
@@ -275,6 +380,9 @@ export async function getChannels(chatToken: string, mapChannels = false) {
 	return users
 }
 
+/**
+ * Make a raw API call
+ */
 export function api(method: "create_chat", args: {
 	chat_token: string
 	username: string
@@ -283,7 +391,6 @@ export function api(method: "create_chat", args: {
 }): Promise<{
 	ok: true
 }>
-
 export function api(method: "create_chat", args: {
 	chat_token: string
 	username: string
@@ -292,7 +399,6 @@ export function api(method: "create_chat", args: {
 }): Promise<{
 	ok: true
 }>
-
 export function api(method: "chats", args: {
 	chat_token: string
 	usernames: string[]
@@ -301,7 +407,6 @@ export function api(method: "chats", args: {
 	ok: true
 	chats: Record<string, (RawTellMessage | RawChannelMessage | RawJoinMessage | RawLeaveMessage)[]>
 }>
-
 export function api(method: "chats", args: {
 	chat_token: string
 	usernames: string[]
@@ -310,21 +415,18 @@ export function api(method: "chats", args: {
 	ok: true
 	chats: Record<string, (RawTellMessage | RawChannelMessage | RawJoinMessage | RawLeaveMessage)[]>
 }>
-
 export function api(method: "account_data", args: {
 	chat_token: string
 }): Promise<{
 	ok: true
 	users: Record<string, Record<string, string[]>>
 }>
-
 export function api(method: "get_token", args: {
 	pass: string
 }): Promise<{
 	ok: true
 	chat_token: string
 }>
-
 export function api(method: string, args: object) {
 	const buffers: Buffer[] = []
 
