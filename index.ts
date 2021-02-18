@@ -389,7 +389,7 @@ export function api(method: "create_chat", args: {
 	username: string
 	tell: string
 	msg: string
-}): Promise<{
+}, retries?: number): Promise<{
 	ok: true
 }>
 export function api(method: "create_chat", args: {
@@ -397,14 +397,14 @@ export function api(method: "create_chat", args: {
 	username: string
 	channel: string
 	msg: string
-}): Promise<{
+}, retries?: number): Promise<{
 	ok: true
 }>
 export function api(method: "chats", args: {
 	chat_token: string
 	usernames: string[]
 	before: number
-}): Promise<{
+}, retries?: number): Promise<{
 	ok: true
 	chats: Record<string, (RawTellMessage | RawChannelMessage | RawJoinMessage | RawLeaveMessage)[]>
 }>
@@ -412,23 +412,23 @@ export function api(method: "chats", args: {
 	chat_token: string
 	usernames: string[]
 	after: number
-}): Promise<{
+}, retries?: number): Promise<{
 	ok: true
 	chats: Record<string, (RawTellMessage | RawChannelMessage | RawJoinMessage | RawLeaveMessage)[]>
 }>
 export function api(method: "account_data", args: {
 	chat_token: string
-}): Promise<{
+}, retries?: number): Promise<{
 	ok: true
 	users: Record<string, Record<string, string[]>>
 }>
 export function api(method: "get_token", args: {
 	pass: string
-}): Promise<{
+}, retries?: number): Promise<{
 	ok: true
 	chat_token: string
 }>
-export function api(method: string, args: object) {
+export function api(method: string, args: object, retries = 4) {
 	const buffers: Buffer[] = []
 
 	return new Promise<APIResponse>((resolve, reject) => {
@@ -475,5 +475,11 @@ export function api(method: string, args: object) {
 
 			})
 		).end(JSON.stringify(args))
+	}).catch(reason => {
+		if (!retries)
+			throw reason
+
+		console.error(reason)
+		return api(method as any, args as any, retries - 1)
 	})
 }
