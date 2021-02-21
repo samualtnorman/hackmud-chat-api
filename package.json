@@ -1,6 +1,6 @@
 {
 	"name": "@samual/hackmud-chat-api",
-	"version": "0.1.2",
+	"version": "0.2.0",
 	"description": "this is just another hackmud chat api for node, this time written in typescript",
 	"main": "index.js",
 	"files": [
