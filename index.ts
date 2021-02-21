@@ -56,7 +56,7 @@ type StartHandler = (token: string) => void
 /**
  * Stores state so you don't have to
  */
-export class HackmudChatAPI {
+export class Client {
 	private token: string | null = null
 	private time = Date.now() / 1000
 	private startHandlers: StartHandler[] | null = []
